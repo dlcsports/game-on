@@ -1,0 +1,6 @@
+@import "../css/styles.css";
+@import "../css/admin.css";
+
+#root {
+  min-height: 100vh;
+}

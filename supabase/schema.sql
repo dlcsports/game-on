@@ -1,0 +1,132 @@
+-- Game On score card schema (run in Supabase SQL Editor)
+
+create extension if not exists "pgcrypto";
+
+create table if not exists public.games (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  team_size text not null,
+  teams_label text not null,
+  winner_points integer not null check (winner_points >= 0),
+  runner_up_points integer not null check (runner_up_points >= 0),
+  category text not null check (category in ('outdoor', 'indoor')),
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.houses (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  outdoor_points integer not null default 0 check (outdoor_points >= 0),
+  indoor_points integer not null default 0 check (indoor_points >= 0),
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Users listed here (after they sign up in Auth) may use the admin panel
+create table if not exists public.admin_profiles (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  email text not null,
+  created_at timestamptz not null default now()
+);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists games_updated_at on public.games;
+create trigger games_updated_at
+  before update on public.games
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists houses_updated_at on public.houses;
+create trigger houses_updated_at
+  before update on public.houses
+  for each row execute function public.set_updated_at();
+
+alter table public.games enable row level security;
+alter table public.houses enable row level security;
+alter table public.admin_profiles enable row level security;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.admin_profiles where user_id = auth.uid()
+  );
+$$;
+
+-- Public read
+drop policy if exists "games_public_read" on public.games;
+create policy "games_public_read"
+  on public.games for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "houses_public_read" on public.houses;
+create policy "houses_public_read"
+  on public.houses for select
+  to anon, authenticated
+  using (true);
+
+-- Admin write
+drop policy if exists "games_admin_insert" on public.games;
+create policy "games_admin_insert"
+  on public.games for insert
+  to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "games_admin_update" on public.games;
+create policy "games_admin_update"
+  on public.games for update
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "games_admin_delete" on public.games;
+create policy "games_admin_delete"
+  on public.games for delete
+  to authenticated
+  using (public.is_admin());
+
+drop policy if exists "houses_admin_insert" on public.houses;
+create policy "houses_admin_insert"
+  on public.houses for insert
+  to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "houses_admin_update" on public.houses;
+create policy "houses_admin_update"
+  on public.houses for update
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "houses_admin_delete" on public.houses;
+create policy "houses_admin_delete"
+  on public.houses for delete
+  to authenticated
+  using (public.is_admin());
+
+-- Admins can read their own profile row
+drop policy if exists "admin_profiles_self_read" on public.admin_profiles;
+create policy "admin_profiles_self_read"
+  on public.admin_profiles for select
+  to authenticated
+  using (user_id = auth.uid());
+
+-- Bootstrap: first admin must be inserted via SQL Editor after Auth signup:
+-- insert into public.admin_profiles (user_id, email)
+-- values ('USER_UUID_FROM_AUTH', 'admin@example.com');
