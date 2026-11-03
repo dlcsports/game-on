@@ -20,117 +20,53 @@ npm run build          # output → dist/
 | `/house-standings` | House standings |
 | `/admin` | Login + edit DB |
 
-**GitHub Pages:** `GITHUB_PAGES=true npm run build` then deploy `dist/` (base path `/game-on/`).
+### GitHub Pages (auto deploy)
 
-Legacy static HTML under `outdoor.html`, `admin/`, etc. remains for reference; the React app is the main UI.
+On push to **`main`**, [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) builds and deploys to Pages.
+
+**One-time repo setup**
+
+1. **Settings → Pages → Build and deployment** → Source: **GitHub Actions**
+2. **Settings → Secrets and variables → Actions** → add:
+   - `VITE_SUPABASE_URL` — e.g. `https://ngeolywmkqvscqxfgtrd.supabase.co`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY` — your `sb_publishable_…` key
+
+3. Push to `main` (or run **Actions → Deploy GitHub Pages** manually).
+
+Live site: **https://dlcsports.github.io/game-on/**
+
+Local Pages build: `npm run build:pages`
 
 ## Setup Supabase
 
-### 1. Environment (server / CLI only)
+Copy `.env.example` → `.env` and fill in **Project Settings → API Keys** (URL, publishable, secret, JWKS for CLI scripts).
 
-Copy `.env.example` → `.env` and fill in values from **Project Settings → API Keys**:
+Never commit `.env` or expose `SUPABASE_SECRET_KEY` in the browser.
 
-```env
-SUPABASE_URL=https://ngeolywmkqvscqxfgtrd.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-SUPABASE_SECRET_KEY=sb_secret_...
-SUPABASE_JWKS_URL=https://ngeolywmkqvscqxfgtrd.supabase.co/auth/v1/.well-known/jwks.json
-```
+### Database
 
-Never commit `.env` or put `SUPABASE_SECRET_KEY` in the browser — only in Node scripts / backend.
+**Recommended:** `npm run db:bootstrap`
 
-### 2. Install server package (Node 22+)
+Or run `supabase/setup-all.sql` in the SQL Editor, then `npm run db:seed`.
 
-```bash
-nvm use    # .nvmrc → 22
-npm install
-```
+For CLI schema apply, use a **Session pooler** URI in `SUPABASE_DB_URL` (see `.env.example`) — not direct `db.*.supabase.co` on IPv4-only networks.
 
-Uses [`@supabase/server`](https://supabase.com/docs/reference/server) for admin seeding and optional `server/dev-api.mjs`.
+### Admin auth
 
-### 3. Create tables + data
+1. **Authentication** → create a user  
+2. SQL Editor → `supabase/admin-first-user.sql` (insert UUID into `admin_profiles`)
 
-**Recommended:** `npm run db:bootstrap`  
-Tries API seed first; if tables are missing, prints the [SQL Editor link](https://supabase.com/dashboard/project/ngeolywmkqvscqxfgtrd/sql/new) and runs `db:setup` only when `.env` has a **Session pooler** URL.
+Admin UI: **`/admin`** — sign in with that user; edits write to `games` and `houses` via RLS.
 
-**Option A — SQL Editor (once):** paste and run `supabase/setup-all.sql`, then `npm run db:seed`.
-
-**Option B — CLI (Session pooler, IPv4):**
-
-Dashboard → **Connect** → **Session pooler** → copy URI into `.env`:
-
-```env
-SUPABASE_DB_URL=postgresql://postgres.ngeolywmkqvscqxfgtrd:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres
-```
-
-- Username **`postgres.ngeolywmkqvscqxfgtrd`**, not `postgres`.
-- Do **not** use `db.ngeolywmkqvscqxfgtrd.supabase.co` locally (IPv6-only → `ENOTFOUND` / `EHOSTUNREACH`).
-- If the DB password contains `*`, `$`, `#`, or `@`, percent-encode it in the URL (`$` → `%24`).
-
-```bash
-npm run db:setup
-npm run db:seed
-```
-
-### 4. Admin auth
-
-1. **Authentication** → enable Email provider → create a user for your admin.
-2. Copy that user’s UUID from **Authentication → Users**, then run:
-
-```sql
-insert into public.admin_profiles (user_id, email)
-values ('PASTE_USER_UUID', 'admin@yourcompany.com');
-```
-
-3. Copy `js/config.example.js` → `js/config.js` and set **Project URL** and **publishable** key from **Project Settings → API**.
-
-Public site reads from `games` and `houses`. Only rows in `admin_profiles` can sign in and edit data (RLS).
-
-## Admin panel (login + edit database)
-
-- URL: **`/admin/`** (local: `http://localhost:8080/admin/`)
-- **Sign in** with Supabase Auth email/password
-- Edit **games** (points, team sizes, outdoor/indoor) and **house standings**; **Save** writes to Supabase (RLS — admin only)
-- Sections: Outdoor games · Indoor games · All games · House standings
-
-**First admin user**
-
-1. Dashboard → **Authentication** → **Users** → create user  
-2. SQL Editor → run `supabase/admin-first-user.sql` (insert their UUID into `admin_profiles`)
-
-Requires **`js/config.js`** with the same URL + publishable key as your project.
-
-## Public pages
-
-| Page | File |
-|------|------|
-| Outdoor | `index.html` |
-| Indoor | `indoor.html` |
-| Points table | `points.html` |
-| House standings | `house-standings.html` |
-
-If `js/config.js` is missing or empty, pages fall back to static `tables/*.html`.
-
-## GitHub Pages
-
-**Settings → Pages** → branch **main**, folder **`/ (root)`**.
-
-Because `config.js` is gitignored, add keys for production using one of:
-
-- Commit a production `config.js` in a private repo, or
-- Use GitHub Actions to inject `config.js` on deploy, or
-- Store only the anon key in a committed `config.js` (safe with RLS; never commit the service role key).
-
-Optional backend smoke test: `npm run dev:api` → `GET http://localhost:8787/games`
+Optional: `npm run dev:api` → `GET http://localhost:8787/games`
 
 ## Repo layout
 
 ```
-css/           Theme + admin styles
-js/            Supabase client, data layer, public + admin logic
-tables/        Static fallback HTML tables
-supabase/      schema.sql, setup-all.sql, seed.sql
-scripts/       db:setup, db:seed (@supabase/server admin client)
-server/        dev-api.mjs example
-admin/         Admin panel UI (browser; publishable key only)
+src/           React app (routes, admin, Supabase client)
+css/           Theme styles
+supabase/      SQL schema, seed, admin setup
+scripts/       db:setup, db:seed, db:bootstrap
+server/        Optional dev API
+.github/       Pages deploy workflow
 ```
