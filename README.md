@@ -27,9 +27,10 @@ On push to **`main`**, [`.github/workflows/deploy-pages.yml`](.github/workflows/
 **One-time repo setup**
 
 1. **Settings → Pages → Build and deployment** → Source: **GitHub Actions**
-2. **Settings → Secrets and variables → Actions** → add:
-   - `VITE_SUPABASE_URL` — e.g. `https://ngeolywmkqvscqxfgtrd.supabase.co`
-   - `VITE_SUPABASE_PUBLISHABLE_KEY` — your `sb_publishable_…` key
+2. **Settings → Secrets and variables → Actions** → **Repository secrets** (same names as local `.env`):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`  
+   (If you use **Environments**, add the same secrets on the `github-pages` environment or rely on repo-level secrets.)
 
 3. Push to `main` (or run **Actions → Deploy GitHub Pages** manually).
 
